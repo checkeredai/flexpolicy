@@ -1,102 +1,78 @@
-import Image, { type ImageProps } from "next/image";
-import { Button } from "@repo/ui/button";
-import styles from "./page.module.css";
+'use client';
 
-type Props = Omit<ImageProps, "src"> & {
-  srcLight: string;
-  srcDark: string;
-};
-
-const ThemeImage = (props: Props) => {
-  const { srcLight, srcDark, ...rest } = props;
-
-  return (
-    <>
-      <Image {...rest} src={srcLight} className="imgLight" />
-      <Image {...rest} src={srcDark} className="imgDark" />
-    </>
-  );
-};
+import { useEffect, useState, FormEvent } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 export default function Home() {
-  return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <ThemeImage
-          className={styles.logo}
-          srcLight="turborepo-dark.svg"
-          srcDark="turborepo-light.svg"
-          alt="Turborepo logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol>
-          <li>
-            Get started by editing <code>apps/web/app/page.tsx</code>
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [status, setStatus]   = useState<'loading' | 'ok' | 'error'>('loading');
+  const [items,  setItems]    = useState<string[]>([]);
+  const [text,   setText]     = useState('');
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new/clone?demo-description=Learn+to+implement+a+monorepo+with+a+two+Next.js+sites+that+has+installed+three+local+packages.&demo-image=%2F%2Fimages.ctfassets.net%2Fe5382hct74si%2F4K8ZISWAzJ8X1504ca0zmC%2F0b21a1c6246add355e55816278ef54bc%2FBasic.png&demo-title=Monorepo+with+Turborepo&demo-url=https%3A%2F%2Fexamples-basic-web.vercel.sh%2F&from=templates&project-name=Monorepo+with+Turborepo&repository-name=monorepo-turborepo&repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fturborepo%2Ftree%2Fmain%2Fexamples%2Fbasic&root-directory=apps%2Fdocs&skippable-integrations=1&teamSlug=vercel&utm_source=create-turbo"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            href="https://turborepo.com/docs?utm_source"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
-          >
-            Read our docs
-          </a>
-        </div>
-        <Button appName="web" className={styles.secondary}>
-          Open alert
-        </Button>
-      </main>
-      <footer className={styles.footer}>
-        <a
-          href="https://vercel.com/templates?search=turborepo&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+  /** 1️⃣  FastAPI health-check */
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/health`)
+      .then((r) => (r.ok ? setStatus('ok') : setStatus('error')))
+      .catch(()  => setStatus('error'));
+  }, []);
+
+  /** 2️⃣  Initial Supabase fetch */
+  useEffect(() => {
+    supabase.from('demo_items').select('name').then((r) => {
+      if (!r.error && r.data) setItems(r.data.map((row) => row.name));
+    });
+  }, []);
+
+  /** 3️⃣  Submit handler → FastAPI → Supabase */
+  async function addItem(e: FormEvent) {
+    e.preventDefault();
+    if (!text.trim()) return;
+
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: text.trim() }),
+    });
+
+    if (res.ok) {
+      setItems((prev) => [...prev, text.trim()]);
+      setText('');
+    } else {
+      console.error('Failed to insert', await res.text());
+    }
+  }
+
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center p-8">
+      <h1 className="text-3xl font-bold mb-6">FlexPolicy Dev Stack</h1>
+
+      {/* FastAPI status */}
+      {status === 'loading' && <p>Checking API…</p>}
+      {status === 'ok'      && <p className="text-green-600">✅ FastAPI is reachable!</p>}
+      {status === 'error'   && <p className="text-red-600">❌ Can’t reach FastAPI</p>}
+
+      {/* List */}
+      <ul className="mt-6 text-lg">
+        {items.map((n) => (
+          <li key={n}>• {n}</li>
+        ))}
+      </ul>
+
+      {/* Add item form */}
+      <form onSubmit={addItem} className="mt-6 flex gap-2">
+        <input
+          className="border rounded px-3 py-1"
+          placeholder="New item"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <button
+          type="submit"
+          className="bg-blue-600 text-white rounded px-4 py-1 disabled:opacity-50"
+          disabled={!text.trim()}
         >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://turborepo.com?utm_source=create-turbo"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to turborepo.com →
-        </a>
-      </footer>
-    </div>
+          Add
+        </button>
+      </form>
+    </main>
   );
 }
